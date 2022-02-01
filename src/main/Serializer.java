@@ -1,5 +1,6 @@
 import com.google.gson.*;
 import com.google.gson.stream.JsonWriter;
+import org.openqa.selenium.devtools.v85.io.IO;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
@@ -8,7 +9,7 @@ import java.util.Map;
 
 public class Serializer {
 
-    private Gson serializer;
+    private final Gson serializer;
     private JsonWriter writer;
 
     public Serializer(JsonWriter writer) {
@@ -36,6 +37,13 @@ public class Serializer {
         writer.endArray();
 
         writer.endObject();
+        writer.close();
+    }
+
+    public void serializeTimetableData(String dataInJson) throws IOException {
+        // need to parse to JsonElement first because API returns prettified data. minifying it first results in dramatic space savings
+        JsonElement data = JsonParser.parseString(dataInJson);
+        writer.jsonValue(serializer.toJson(data));
         writer.close();
     }
 
