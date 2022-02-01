@@ -35,7 +35,7 @@ public class Manager {
         WebDriver driver = new ChromeDriver(options);
 
         evalPage = new EvalPage(driver, "D:\\projects\\IdeaProjects\\boreal-e\\extracted");
-        executor = new Executor(20, 20, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
+        executor = new Executor(21, 21, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
         return driver;
     }
 
@@ -48,7 +48,7 @@ public class Manager {
     private void executeCodes(List<String> courseCodes) {
         int size = courseCodes.size() / 20;
         int max = courseCodes.size();
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 21; i++) {
             executor.execute(new ListExtractor(courseCodes.subList(i * size, Math.min((i + 1) * size, max)), i));
         }
     }
