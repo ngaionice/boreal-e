@@ -24,9 +24,12 @@ public class Manager {
         WebDriver driver = main.initialize();
         System.out.println("Fetching course codes.");
         List<String> codes = main.evalPage.getAllCourseCodes();
+        driver.quit();
+
         System.out.println("Fetching data for " + codes.size() + " courses.");
         main.executeCodes(codes);
-        driver.quit();
+        main.executor.shutdown();
+
     }
 
     private WebDriver initialize() {

@@ -26,8 +26,9 @@ public class ListExtractor implements Runnable {
         try {
             EvalPage evalPage = new EvalPage(driver, "D:\\projects\\IdeaProjects\\boreal-e\\extracted");
             evalPage.switchToCourseCodeMode();
-            for (String code : codes) {
-                System.out.println("Fetching data for " + code);
+            for (int i = 0; i < codes.size(); i++) {
+                String code = codes.get(i);
+                System.out.printf("Group %d - %d/%d: fetching data for %s.\n", index, i, codes.size(), code);
                 evalPage.saveCourseData(code);
             }
             System.out.println("Finished fetching data for for group " + index + ".");
