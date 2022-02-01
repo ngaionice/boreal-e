@@ -1,8 +1,5 @@
 import com.google.gson.stream.JsonWriter;
-import org.openqa.selenium.By;
-import org.openqa.selenium.NoSuchElementException;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
+import org.openqa.selenium.*;
 import org.openqa.selenium.support.PageFactory;
 import org.openqa.selenium.support.ui.Select;
 
@@ -22,12 +19,24 @@ import java.util.stream.IntStream;
 // block ID determines which faculty is being used
 public class EvalPage {
 
-    private final String courseValuesId = "divFbvDetails";
+
+    private final String firstInputId = "txtFbvSubjects";
+    private final String firstValuesId = "divFbvSubjects";
+    private final String firstToggleId = "imgFbvSubjects";
+
+    private final String secondInputId = "txtFbvSubjectsValues";
+    private final String secondValuesId = "divFbvSubjectsValues";
+    private final String secondToggleId = "imgFbvSubjectsValues";
+
+    private final String thirdValuesId = "divFbvDetails";
+    private final String thirdToggleId = "imgFbvDetails";
+
+    private final String itemsPerPageSelectXPath = "//*[@id=\"fbvGridPageSizeSelectBlock\"]/select";
 
     private final WebDriver driver;
     private final String saveLocation;
     private final Serializer serializer;
-    private final String departmentValuesId = "divFbvSubjectsValues";
+
 
     public EvalPage(WebDriver driver, String saveLocation) {
         this.driver = driver;
@@ -64,6 +73,29 @@ public class EvalPage {
         }
     }
 
+    public void switchToCourseCodeMode() {
+        findById("imgFbvSubjects").click();
+        waitForInputLoad();
+        findById("divFbvSubjects").findElements(By.tagName("p")).get(1).click();
+        waitForLoad();
+    }
+
+    /**
+     * Assumes using Department mode.
+     */
+    public List<String> getAllCourseCodes() {
+        String getMoreId = "getNextFbvDetails";
+        findById(thirdToggleId).click();
+        waitForInputLoad();
+
+        while (driver.findElements(By.id(getMoreId)).size() > 0) {
+            findById(getMoreId).click();
+            waitForLoad();
+            waitForInputLoad();
+        }
+        return findById(thirdValuesId).findElements(By.tagName("p")).stream().filter(p -> !p.getAttribute("id").contains("_")).map(p -> p.getAttribute("textContent")).collect(Collectors.toList());
+    }
+
     private WebElement findById(String id) {
         return driver.findElement(By.id(id));
     }
@@ -74,29 +106,29 @@ public class EvalPage {
 
     public List<String> getDepartmentNames() {
         waitForLoad();
-        return findById(departmentValuesId).findElements(By.tagName("p")).stream().filter(p -> !p.getAttribute("id").contains("_")).map(p -> p.getAttribute("textContent")).collect(Collectors.toList());
+        return findById(secondValuesId).findElements(By.tagName("p")).stream().filter(p -> !p.getAttribute("id").contains("_")).map(p -> p.getAttribute("textContent")).collect(Collectors.toList());
     }
 
     private void initializeDepartment(String deptName) {
         waitForLoad();
 
-        String departmentInputId = "txtFbvSubjectsValues";
-        findById(departmentInputId).clear();
-        findById(departmentInputId).sendKeys(deptName);
-        waitForInputLoad();
-
-        selectDepartmentFromList(deptName);
-        waitForLoad();
-    }
-
-    private void selectDepartmentFromList(String deptName) {
-        for (WebElement p : findById(departmentValuesId).findElements(By.tagName("p"))) {
-            if (p.getAttribute("textContent").equals(deptName)) {
-                p.click();
-                return;
+        boolean selectedCorrectDept = false;
+        do {
+            findById(secondInputId).clear();
+            findById(secondInputId).sendKeys(deptName);
+            waitForInputLoad();
+            // the first row should be the target dept, if not then retry
+            WebElement deptRow = findById(secondValuesId).findElement(By.tagName("p"));
+            try {
+                if (deptRow.getAttribute("textContent").equals(deptName)) {
+                    deptRow.click();
+                }
+                selectedCorrectDept = true;
+            } catch (StaleElementReferenceException ignored) {
             }
-        }
-        throw new RuntimeException("Failed to find department in dropdown.");
+        } while (!selectedCorrectDept);
+
+        waitForLoad();
     }
 
     public void fetchDepartmentData(String deptName) throws IOException {
@@ -104,7 +136,7 @@ public class EvalPage {
 
         initializeDepartment(deptName);
 
-        findById(courseValuesId).findElements(By.tagName("p")).forEach(p -> {
+        findById(thirdValuesId).findElements(By.tagName("p")).forEach(p -> {
             if (!p.getAttribute("id").contains("_")) {
                 courseCodes.add(p.getAttribute("id"));
             }
@@ -114,13 +146,62 @@ public class EvalPage {
         }
     }
 
+
+    private void writeCourseDataToFile(String courseCode, List<Header> header, List<Map<String, String>> rows) throws IOException {
+        LocalDate timestamp = LocalDate.now();
+        String fileName = courseCode.toLowerCase() + "-" + timestamp.format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".json";
+        String path = saveLocation + "\\" + fileName;
+        serializer.setWriter(new JsonWriter(new BufferedWriter(new FileWriter(path))));
+        serializer.serializeCourse(header, rows);
+    }
+
+    private void refreshPage() {
+        driver.get(driver.getCurrentUrl());
+        PageFactory.initElements(driver, this);
+        waitForLoad();
+    }
+
+    private void setItemsPerPage() {
+        new Select(findByXpath(itemsPerPageSelectXPath)).selectByValue("100");
+        waitForLoad();
+    }
+
+    public void saveCourseData(String courseCode) throws IOException {
+
+        setItemsPerPage();
+
+        boolean succeeded = false;
+        List<Header> header = null;
+        List<Map<String, String>> rows = null;
+        int attempts = 0;
+        while (!succeeded && attempts < 30) {
+            try {
+                findById(secondInputId).clear();
+                waitForInputLoad();
+                findById(secondInputId).sendKeys(courseCode);
+                waitForInputLoad();
+                findById(secondValuesId).findElements(By.tagName("p")).stream().filter(p -> p.getAttribute("id").equals(courseCode)).forEach(WebElement::click);
+
+                waitForLoad();
+
+                header = getTableHeaders();
+                rows = getTableContents();
+                succeeded = true;
+            } catch (NoSuchElementException | StaleElementReferenceException e) {
+                refreshPage();
+                switchToCourseCodeMode();
+                setItemsPerPage();
+                attempts++;
+            }
+        }
+        writeCourseDataToFile(courseCode, header, rows);
+    }
+
     public void saveCourseData(String deptName, String courseCode) throws IOException {
-        System.out.println("Obtaining data from " + courseCode);
+//        System.out.println("Obtaining data from " + courseCode);
         String courseInputId = "txtFbvDetails";
 
-        String itemsPerPageXPath = "//*[@id=\"fbvGridPageSizeSelectBlock\"]/select";
-        new Select(findByXpath(itemsPerPageXPath)).selectByValue("100");
-        waitForLoad();
+        setItemsPerPage();
 
         boolean succeeded = false;
         List<Header> header = null;
@@ -128,7 +209,7 @@ public class EvalPage {
         while (!succeeded) {
             try {
                 findById(courseInputId).click();
-                findById(courseValuesId).findElements(By.tagName("p")).stream().filter(p -> p.getAttribute("id").equals(courseCode)).forEach(WebElement::click);
+                findById(thirdValuesId).findElements(By.tagName("p")).stream().filter(p -> p.getAttribute("id").equals(courseCode)).forEach(WebElement::click);
 
                 waitForLoad();
 
@@ -142,11 +223,7 @@ public class EvalPage {
             }
         }
 
-        LocalDate timestamp = LocalDate.now();
-        String fileName = courseCode.toLowerCase() + "-" + timestamp.format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".json";
-        String path = saveLocation + "\\" + fileName;
-        serializer.setWriter(new JsonWriter(new BufferedWriter(new FileWriter(path))));
-        serializer.serializeCourse(header, rows);
+        writeCourseDataToFile(courseCode, header, rows);
     }
 
     private List<Header> getTableHeaders() {
