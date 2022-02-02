@@ -32,7 +32,7 @@ public class TimetableDeptDataExtractor {
     public void fetchAndSave(String deptCode, String sessionCode, String saveLocation)  {
         try {
             setSerializerSavePath(sessionCode, deptCode, saveLocation);
-            driver.get("https://timetable.iit.artsci.utoronto.ca/api/"+ sessionCode +"/courses?code=" + deptCode);
+            driver.get("https://timetable.iit.artsci.utoronto.ca/api/"+ sessionCode +"/courses?org=" + deptCode);
             Thread.sleep(2000);
             String data = driver.findElement(By.tagName("pre")).getAttribute("textContent");
             serializer.serializeTimetableData(data.equals("[]") ? "{}" : data);
